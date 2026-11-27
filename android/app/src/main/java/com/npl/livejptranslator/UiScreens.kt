@@ -1227,12 +1227,12 @@ private fun SettingsPanel(
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 OutlinedButton(onClick = {
-                    onSave(settings.copy(model = "gemini-2.5-flash-lite", smartVad = true, pauseMs = 300, overlapMs = 400, chunkSeconds = 4, autoGain = true))
+                    onSave(settings.copy(model = "gemini-2.5-flash", smartVad = true, pauseMs = 300, overlapMs = 400, chunkSeconds = 4, autoGain = true))
                 }) { Text("⚡ 極速低延遲") }
             }
             item {
                 OutlinedButton(onClick = {
-                    onSave(settings.copy(model = "gemini-2.5-flash-lite", smartVad = true, pauseMs = 350, overlapMs = 500, chunkSeconds = 5, autoGain = true))
+                    onSave(settings.copy(model = "gemini-2.5-flash", smartVad = true, pauseMs = 350, overlapMs = 500, chunkSeconds = 5, autoGain = true))
                 }) { Text("⚖ 平衡推薦") }
             }
             item {

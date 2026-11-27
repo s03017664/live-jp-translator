@@ -72,6 +72,7 @@
               <button class="sec" style="color:#f472b6;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleReplyBar()">⌨譯</button>
               <button class="sec" style="color:#fff;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleOrig()">雙語</button>
               <button class="sec" id="lockBtn" style="color:#cbd5e1;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleLock()">🔓</button>
+              <button class="sec" style="color:#fff;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="openFloatingSubtitles()" title="彈出置頂懸浮字幕窗">🪟 懸浮窗</button>
               <button class="sec" style="color:#94a3b8;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="setMini(true)">—</button>
             </div>
           </div>
@@ -672,14 +673,59 @@ ${ans}`);
       toggleBtn.textContent = '停止翻譯'; status.textContent = '● 智能聆聽中…';
     }
 
+    let pipWin = null;
+    function syncPipWindow(origText, transText, stText) {
+      try {
+        if (!pipWin || pipWin.closed) return;
+        const oEl = pipWin.document.getElementById('pipOrig');
+        const tEl = pipWin.document.getElementById('pipTrans');
+        const sEl = pipWin.document.getElementById('pipStatus');
+        if (oEl && origText !== undefined) oEl.textContent = origText;
+        if (tEl && transText !== undefined) tEl.textContent = transText;
+        if (sEl && stText !== undefined) sEl.textContent = stText;
+      } catch (_) {}
+    }
+
+    async function openFloatingSubtitles() {
+      try {
+        if (pipWin && !pipWin.closed) {
+          pipWin.focus();
+          syncPipWindow(liveOrig.textContent, liveTrans.textContent, status.textContent);
+          return;
+        }
+        if ('documentPictureInPicture' in window && window.documentPictureInPicture.requestWindow) {
+          pipWin = await window.documentPictureInPicture.requestWindow({ width: 460, height: 180 });
+        } else {
+          pipWin = window.open('', 'LiveSubtitlesPiP', 'width=460,height=180,left=120,top=120,resizable=yes,scrollbars=yes');
+        }
+        if (!pipWin) return alert('瀏覽器阻擋了彈出視窗，請允許此網站彈出視窗或並排瀏覽器視窗。');
+        pipWin.document.open();
+        pipWin.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>即時字幕懸浮窗</title>
+          <style>
+            body { margin:0; padding:14px 16px; background:#0f172a; color:#f8fafc; font-family:"Microsoft JhengHei","PingFang HK",sans-serif; display:flex; flex-direction:column; justify-content:center; min-height:calc(100vh - 28px); }
+            .st { font-size:12px; color:#93c5fd; margin-bottom:6px; }
+            .orig { font-size:14px; color:#cbd5e1; margin-bottom:6px; line-height:1.4; }
+            .trans { font-size:20px; font-weight:700; color:#ffffff; line-height:1.45; }
+          </style></head><body>
+          <div id="pipStatus" class="st">${status.textContent || '● 已連線'}</div>
+          <div id="pipOrig" class="orig">${liveOrig.textContent || ''}</div>
+          <div id="pipTrans" class="trans">${liveTrans.textContent || '等待講者說話…'}</div>
+        </body></html>`);
+        pipWin.document.close();
+      } catch (e) {
+        alert('無法開啟懸浮視窗：' + e.message);
+      }
+    }
+
     async function translateAudio(b64, durSec, reason) {
       status.textContent = `● ${reason}，AI 翻譯中…`;
+      syncPipWindow(undefined, undefined, status.textContent);
       const prof = getActiveProfile();
       const ctx = historyData.slice(0, 4).reverse().map(x => `原:${x.original} / 譯:${x.translated}`).join('\n');
       const styleText = style.value === 'CANTONESE' ? '翻譯成地道香港廣東話口語（繁體字）。' : (style.value === 'ENGLISH' ? 'Translate into natural English.' : '翻譯成自然繁體中文。');
       const furiHint = (showFurigana.checked && (sourceLanguage.value === 'JAPANESE' || sourceLanguage.value === 'AUTO')) ? '當原文為日文時，請在 orig 欄位為漢字加括號平假名讀音，如 初見(しょけん)。\n' : '';
       const profHint = prof ? `主播：${prof.name}；專屬詞庫：${prof.glossary}` : '';
-      const prompt = `你是專業直播即時口譯員。來源語言：${LANG_HINT[sourceLanguage.value]}。${styleText}\n${furiHint}開頭若有約0.5秒重疊緩衝聲音且已在前文出現，請自然銜接勿重複。\n${profHint}\n全域詞庫：${glossary.value}\n前文：${ctx}\n只輸出 JSON：{"orig":"聽寫原文","trans":"翻譯結果"}，若無清晰人聲輸出 {"orig":"","trans":"SILENT"}`;
+      const prompt = `你是專業直播即時口譯員。來源語言：${LANG_HINT[sourceLanguage.value]}。${styleText}\n${furiHint}開頭若有約0.5秒重疊緩衝聲音且已在前文出現，請自然銜接勿重複。\n${profHint}\n全域詞庫：${glossary.value}\n前文：${ctx}\n只輸出單一 JSON 物件（不要陣列）：{"orig":"聽寫原文","trans":"翻譯結果"}，若無清晰人聲輸出 {"orig":"","trans":"SILENT"}`;
       const genCfg = { temperature: 0.15, responseMimeType: 'application/json' };
       if (model.value.startsWith('gemini-2.5')) genCfg.thinkingConfig = { thinkingBudget: 0 };
       try {
@@ -688,20 +734,30 @@ ${ans}`);
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'audio/wav', data: b64 } }] }], generationConfig: genCfg })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
         recordApiUsage(data.usageMetadata, model.value, durSec);
         const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-        const obj = JSON.parse(txt.replace(/```json|```/g,'').trim());
-        const orig = obj.orig || obj.jp || ''; const trans = obj.trans || obj.zh || '';
-        if (trans && trans !== 'SILENT') {
+        let parsed = JSON.parse(txt.replace(/```json|```/g,'').trim());
+        if (Array.isArray(parsed)) parsed = parsed[0] || {};
+        const orig = (parsed.orig || parsed.original || parsed.jp || '').trim();
+        const trans = (parsed.trans || parsed.translation || parsed.zh || '').trim();
+        if (trans && trans.toUpperCase() !== 'SILENT') {
           const item = { id: Date.now(), date: todayStr(), time: new Date().toTimeString().slice(0,8), original: orig, translated: trans, langCode: sourceLanguage.value.slice(0,2), profileName: prof ? prof.name : '', starred: false };
           latestId = item.id;
           liveOrig.textContent = orig; liveTrans.textContent = trans;
+          syncPipWindow(orig, trans, `● 即時翻譯中（${reason}）`);
           historyData.unshift(item);
           renderHistory(); syncLiveStarBtn(); saveCfg();
           speakDubbing(trans);
+          status.textContent = `● 即時翻譯中（${reason}）`;
+        } else {
+          status.textContent = `● 聆聽中（未偵測到清晰人聲）`;
+          syncPipWindow(undefined, undefined, status.textContent);
         }
-        status.textContent = `● 即時翻譯中（${reason}）`;
-      } catch (e) { status.textContent = '⚠ 錯誤：' + e.message; }
+      } catch (e) {
+        status.textContent = '⚠ 錯誤：' + e.message;
+        syncPipWindow(undefined, undefined, status.textContent);
+      }
     }
 
     async function summarizeSession(dateKey) {

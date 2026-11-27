@@ -68,7 +68,7 @@ data class FlashcardItem(
 data class AppSettings(
     val apiKey: String = "",
     val baseUrl: String = "https://generativelanguage.googleapis.com",
-    val model: String = "gemini-2.5-flash-lite",
+    val model: String = "gemini-2.5-flash",
     val sourceLanguage: SourceLanguage = SourceLanguage.JAPANESE,
     val style: TranslationStyle = TranslationStyle.CANTONESE,
     val activeProfileId: Long = 1L,
@@ -470,7 +470,7 @@ object StorageHelper {
         TranslatorState.settings.value = AppSettings(
             apiKey = sp.getString("apiKey", "") ?: "",
             baseUrl = sp.getString("baseUrl", "https://generativelanguage.googleapis.com") ?: "https://generativelanguage.googleapis.com",
-            model = sp.getString("model", "gemini-2.5-flash-lite") ?: "gemini-2.5-flash-lite",
+            model = sp.getString("model", "gemini-2.5-flash") ?: "gemini-2.5-flash",
             sourceLanguage = runCatching { SourceLanguage.valueOf(sp.getString("sourceLanguage", SourceLanguage.JAPANESE.name)!!) }.getOrDefault(SourceLanguage.JAPANESE),
             style = runCatching { TranslationStyle.valueOf(sp.getString("style", TranslationStyle.CANTONESE.name)!!) }.getOrDefault(TranslationStyle.CANTONESE),
             activeProfileId = sp.getLong("activeProfileId", 1L),
