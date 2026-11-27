@@ -150,7 +150,7 @@ object GeminiApi {
             }
 
             val cleanBase = s.baseUrl.trimEnd('/')
-            val url = URL("$cleanBase/v1beta/models/gemini-2.5-flash:generateContent?key=${s.apiKey.trim()}")
+            val url = URL("$cleanBase/v1beta/models/gemini-flash-latest:generateContent?key=${s.apiKey.trim()}")
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")

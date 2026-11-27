@@ -244,7 +244,7 @@ fun MainAppScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("直播即時譯 v1.8.1", fontWeight = FontWeight.Bold)
+                        Text("直播即時譯 v1.8.2", fontWeight = FontWeight.Bold)
                         AssistChip(
                             onClick = { showBalanceDialog = true },
                             label = {
@@ -806,12 +806,12 @@ private fun ControlPanel(
                 label = { Text("收音咪", style = MaterialTheme.typography.labelSmall) }
             )
             FilterChip(
-                selected = settings.model == "gemini-2.5-flash",
+                selected = settings.model != "gemini-flash-lite-latest",
                 onClick = {
-                    val next = if (settings.model == "gemini-2.5-flash") "gemini-2.5-flash-lite" else "gemini-2.5-flash"
+                    val next = if (settings.model == "gemini-flash-lite-latest") "gemini-flash-latest" else "gemini-flash-lite-latest"
                     onSaveSettings(settings.copy(model = next))
                 },
-                label = { Text(if (settings.model == "gemini-2.5-flash") "高準度" else "極速省錢", style = MaterialTheme.typography.labelSmall) }
+                label = { Text(if (settings.model == "gemini-flash-lite-latest") "極速省錢" else "高準度", style = MaterialTheme.typography.labelSmall) }
             )
         }
 
@@ -1254,17 +1254,17 @@ private fun SettingsPanel(
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 OutlinedButton(onClick = {
-                    onSave(settings.copy(model = "gemini-2.5-flash", smartVad = true, pauseMs = 300, overlapMs = 400, chunkSeconds = 4, autoGain = true))
+                    onSave(settings.copy(model = "gemini-flash-latest", smartVad = true, pauseMs = 300, overlapMs = 400, chunkSeconds = 4, autoGain = true))
                 }) { Text("⚡ 極速低延遲") }
             }
             item {
                 OutlinedButton(onClick = {
-                    onSave(settings.copy(model = "gemini-2.5-flash", smartVad = true, pauseMs = 350, overlapMs = 500, chunkSeconds = 5, autoGain = true))
+                    onSave(settings.copy(model = "gemini-flash-latest", smartVad = true, pauseMs = 350, overlapMs = 500, chunkSeconds = 5, autoGain = true))
                 }) { Text("⚖ 平衡推薦") }
             }
             item {
                 OutlinedButton(onClick = {
-                    onSave(settings.copy(model = "gemini-2.5-flash", smartVad = true, pauseMs = 450, overlapMs = 600, chunkSeconds = 6, autoGain = true))
+                    onSave(settings.copy(model = "gemini-flash-latest", smartVad = true, pauseMs = 450, overlapMs = 600, chunkSeconds = 6, autoGain = true))
                 }) { Text("🎯 超高準度") }
             }
         }
@@ -1277,7 +1277,7 @@ private fun SettingsPanel(
 
         OutlinedTextField(
             value = settings.model, onValueChange = { onSave(settings.copy(model = it)) },
-            label = { Text("AI 模型名稱（Model ID，例：gemini-2.5-flash）") },
+            label = { Text("AI 模型名稱（Model ID，例：gemini-flash-latest）") },
             modifier = Modifier.fillMaxWidth(), singleLine = true
         )
 

@@ -166,7 +166,7 @@ class TranslationService : Service() {
 
         val profileTag = TranslatorState.activeProfile()?.name?.let { " · $it" } ?: ""
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("直播即時譯 v1.8.1 運作中")
+            .setContentTitle("直播即時譯 v1.8.2 運作中")
             .setContentText("即時翻譯：${settings.sourceLanguage.label}$profileTag")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .build()

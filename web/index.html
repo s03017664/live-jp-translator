@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>直播即時譯 v1.8.1</title>
+  <title>直播即時譯 v1.8.2</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <style>
@@ -45,7 +45,7 @@
 </head>
 <body>
   <header>
-    <div class="brand"><img src="icon.svg" width="28" height="28" alt="icon" />直播即時譯 v1.8.1</div>
+    <div class="brand"><img src="icon.svg" width="28" height="28" alt="icon" />直播即時譯 v1.8.2</div>
     <div class="row" style="margin:0">
       <button class="sec" onclick="toggleTheme()">深淺色</button>
       <button class="sec" onclick="exportJson()">匯出 JSON</button>
@@ -135,8 +135,9 @@
           <div style="flex:1">
             <label>AI 模型</label>
             <select id="model" onchange="saveCfg()">
-              <option value="gemini-2.5-flash-lite">極速省錢 (Flash-Lite)</option>
-              <option value="gemini-2.5-flash">超高準度 (Flash)</option>
+              <option value="gemini-flash-latest" selected>平衡推薦 (Gemini Flash Latest)</option>
+              <option value="gemini-flash-lite-latest">極速省錢 (Flash-Lite Latest)</option>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
             </select>
           </div>
           <div style="flex:1">
@@ -429,7 +430,10 @@ ${ans}`);
 
     function loadCfg() {
       const saved = JSON.parse(localStorage.getItem('live_jp_web') || '{}');
+      if (saved.model === 'gemini-2.5-flash') saved.model = 'gemini-flash-latest';
+      if (saved.model === 'gemini-2.5-flash-lite') saved.model = 'gemini-flash-lite-latest';
       ['apiKey','model','baseUrl','sourceLanguage','style','glossary','dubSpeed'].forEach(k => { if (saved[k]) document.getElementById(k).value = saved[k]; });
+      if (!model.value) model.value = 'gemini-flash-latest';
       if (typeof saved.smartVad === 'boolean') smartVad.checked = saved.smartVad;
       if (typeof saved.overlapOn === 'boolean') overlapOn.checked = saved.overlapOn;
       if (typeof saved.showFurigana === 'boolean') showFurigana.checked = saved.showFurigana;
