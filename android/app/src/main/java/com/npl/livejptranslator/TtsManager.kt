@@ -26,7 +26,7 @@ object TtsManager {
     private val ready = AtomicBoolean(false)
     val isDubbingSpeaking = AtomicBoolean(false)
 
-    private val furiganaRegex = Regex("[\(（][ぁ-んァ-ンー]+[\)）]")
+    private val furiganaRegex = Regex("""[\(（][ぁ-んァ-ンー]+[\)）]""")
 
     fun init(context: Context) {
         val appCtx = context.applicationContext

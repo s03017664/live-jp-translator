@@ -838,16 +838,16 @@ object StorageHelper {
     }
 
     fun exportCsv(): String {
-        val sb = StringBuilder("\uFEFF日期,時間,主播設定檔,已收藏,語言,原文,翻譯\n")
-        TranslatorState.history.value.forEach {
-            val orig = it.original.replace("\"", "\"\"")
-            val trans = it.translated.replace("\"", "\"\"")
-            val prof = it.profileName.replace("\"", "\"\"")
-            val star = if (it.starred) "★" else ""
-            sb.append("\"${it.date}\",\"${it.time}\",\"$prof\",\"$star\",\"${it.langCode}\",\"$orig\",\"$trans\"\n")
-        }
-        return sb.toString()
+    val sb = StringBuilder("\uFEFF日期,時間,主播設定檔,已收藏,語言,原文,翻譯\n")
+    TranslatorState.history.value.forEach {
+        val orig = it.original.replace("\"", "\"\"")
+        val trans = it.translated.replace("\"", "\"\"")
+        val prof = it.profileName.replace("\"", "\"\"")
+        val star = if (it.starred) "★" else ""
+        sb.append("\"${it.date}\",\"${it.time}\",\"$prof\",\"$star\",\"${it.langCode}\",\"$orig\",\"$trans\"\n")
     }
+    return sb.toString()
+}
 
     fun importJson(context: Context, raw: String, overwrite: Boolean): Result<Int> = runCatching {
         val root = JSONObject(raw)
