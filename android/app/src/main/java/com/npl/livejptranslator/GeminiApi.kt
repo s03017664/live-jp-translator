@@ -29,7 +29,7 @@ object GeminiApi {
 
         val mergedGlossary = listOfNotNull(
             activeProfile?.let { "目前觀看主播／頻道：${it.name}；專屬人名與口頭禪詞庫：${it.glossary}" },
-            s.glossary.takeIf { it.isNotBlank() }?.let { "全域補充詞庫：${s.glossary}" }
+            s.glossary.takeIf { it.isNotBlank() }?.let { "全域補充詞庫：$it" }
         ).joinToString("\n")
 
         val prompt = buildString {
@@ -50,8 +50,8 @@ object GeminiApi {
                 appendLine("前文語境參考（幫助理解上下文，不要重複輸出前文）：")
                 appendLine(recentContext)
             }
-            appendLine("""請只輸出 JSON，不要加 Markdown：{"orig":"聽寫原文","trans":"翻譯結果"}""")
-            appendLine("""若音訊沒有清晰人聲或只有背景音樂/雜音，請輸出 {"orig":"","trans":"SILENT"}""")
+            appendLine("請只輸出 JSON，不要加 Markdown：{\"orig\":\"聽寫原文\",\"trans\":\"翻譯結果\"}")
+            appendLine("若音訊沒有清晰人聲或只有背景音樂/雜音，請輸出 {\"orig\":\"\",\"trans\":\"SILENT\"}")
         }
 
         val genCfg = JSONObject().apply {
@@ -96,7 +96,7 @@ object GeminiApi {
             你是一位親切的日語與直播潮語老師。請用簡潔易懂的繁體中文（香港口語風格）拆解以下直播句子：
             - 原文：${item.original}
             - 翻譯：${item.translated}
-
+            
             請分 3 點簡短說明：
             1. 💬 句意與語氣（主播當下係乜嘢語氣、同觀眾傾偈點解咁講）
             2. 🔍 關鍵詞／潮語／縮寫拆解（挑出 1–3 個最值得學嘅詞彙、文法或網語）
@@ -263,9 +263,9 @@ object GeminiApi {
 
         val prompt = """
             你是一位貼心的直播筆記與語言學習助手。以下是《$sessionTitle》的即時翻譯字幕紀錄（含星號收藏片段）：
-
+            
             $transcriptText
-
+            
             請用清晰易讀的繁體中文整理一份精華筆記，包含以下 3 個部分：
             1. 📌 本場重點話題摘要（以 3–6 個簡潔要點概括主播聊過的核心話題，優先突出標記 ⭐ 的內容）
             2. 🗣️ 學到的實用口語／生字清單（挑選 5–8 個最實用的地道口語、潮語或常用句，格式：原文（若為日文請附平假名讀音）｜中文意思｜簡短用法說明）
@@ -327,6 +327,7 @@ object GeminiApi {
         val promptTokens = usageMeta?.optInt("promptTokenCount", 0) ?: 0
         val outputTokens = usageMeta?.optInt("candidatesTokenCount", 0) ?: 0
 
+        // Parse promptTokensDetails if provided by Gemini API to separate AUDIO vs TEXT tokens
         var audioTokens = 0
         val details = usageMeta?.optJSONArray("promptTokensDetails")
         if (details != null) {

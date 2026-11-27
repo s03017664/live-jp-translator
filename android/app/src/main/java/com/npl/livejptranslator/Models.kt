@@ -362,7 +362,7 @@ object TranslatorState {
                 val meaning = parts.getOrNull(1)?.trim().orEmpty()
                 val usageNote = parts.getOrNull(2)?.trim().orEmpty()
                 val termOnly = TtsManager.stripFurigana(rawLeft)
-                    .replace(Regex("^[0-9]+\.?\s*"), "")
+                    .replace(Regex("""^[0-9]+\.?\s*"""), "")
                     .trim()
                 if (termOnly.isNotBlank() && meaning.isNotBlank() && flashcards.value.none { it.term == termOnly }) {
                     added.add(
@@ -838,16 +838,16 @@ object StorageHelper {
     }
 
     fun exportCsv(): String {
-    val sb = StringBuilder("\uFEFF日期,時間,主播設定檔,已收藏,語言,原文,翻譯\n")
-    TranslatorState.history.value.forEach {
-        val orig = it.original.replace("\"", "\"\"")
-        val trans = it.translated.replace("\"", "\"\"")
-        val prof = it.profileName.replace("\"", "\"\"")
-        val star = if (it.starred) "★" else ""
-        sb.append("\"${it.date}\",\"${it.time}\",\"$prof\",\"$star\",\"${it.langCode}\",\"$orig\",\"$trans\"\n")
+        val sb = StringBuilder("\uFEFF日期,時間,主播設定檔,已收藏,語言,原文,翻譯\n")
+        TranslatorState.history.value.forEach {
+            val orig = it.original.replace("\"", "\"\"")
+            val trans = it.translated.replace("\"", "\"\"")
+            val prof = it.profileName.replace("\"", "\"\"")
+            val star = if (it.starred) "★" else ""
+            sb.append("\"${it.date}\",\"${it.time}\",\"$prof\",\"$star\",\"${it.langCode}\",\"$orig\",\"$trans\"\n")
+        }
+        return sb.toString()
     }
-    return sb.toString()
-}
 
     fun importJson(context: Context, raw: String, overwrite: Boolean): Result<Int> = runCatching {
         val root = JSONObject(raw)
