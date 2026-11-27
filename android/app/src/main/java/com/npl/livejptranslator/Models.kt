@@ -226,6 +226,7 @@ object TranslatorState {
     val isRunning = MutableStateFlow(false)
     val isPaused = MutableStateFlow(false)
     val statusText = MutableStateFlow("準備就緒")
+    val lastApiError = MutableStateFlow("")
     val currentRms = MutableStateFlow(0)
     val latestItemId = MutableStateFlow<Long?>(null)
     val latestStarred = MutableStateFlow(false)

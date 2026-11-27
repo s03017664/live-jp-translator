@@ -20,6 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -241,7 +244,7 @@ fun MainAppScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("直播即時譯 v1.8.0", fontWeight = FontWeight.Bold)
+                        Text("直播即時譯 v1.8.1", fontWeight = FontWeight.Bold)
                         AssistChip(
                             onClick = { showBalanceDialog = true },
                             label = {
@@ -671,6 +674,30 @@ private fun ControlPanel(
                     Text(orig, style = MaterialTheme.typography.bodySmall, color = Color(0xFFCBD5E1))
                 }
                 Text(trans, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        val lastApiError by TranslatorState.lastApiError.collectAsState()
+        val ctxForCopy = LocalContext.current
+        if (lastApiError.isNotBlank()) {
+            Surface(
+                color = Color(0xFF450A0A),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text("⚠ 完整 API 錯誤診斷", style = MaterialTheme.typography.labelMedium, color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = {
+                            val cm = ctxForCopy.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("api_error", lastApiError))
+                        }) { Text("複製", color = Color(0xFFFECACA)) }
+                        TextButton(onClick = { TranslatorState.lastApiError.value = "" }) {
+                            Text("清除", color = Color(0xFFFECACA))
+                        }
+                    }
+                    Text(lastApiError, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                }
             }
         }
 
@@ -1247,6 +1274,49 @@ private fun SettingsPanel(
             label = { Text("API Base URL（開 VPN 直連不用改）") },
             modifier = Modifier.fillMaxWidth(), singleLine = true
         )
+
+        OutlinedTextField(
+            value = settings.model, onValueChange = { onSave(settings.copy(model = it)) },
+            label = { Text("AI 模型名稱（Model ID，例：gemini-2.5-flash）") },
+            modifier = Modifier.fillMaxWidth(), singleLine = true
+        )
+
+        var testingApi by remember { mutableStateOf(false) }
+        var apiTestReport by remember { mutableStateOf("") }
+        val diagScope = rememberCoroutineScope()
+        val settingsCtx = LocalContext.current
+        Button(
+            onClick = {
+                testingApi = true
+                apiTestReport = "正在連線測試中…"
+                diagScope.launch {
+                    val res = withContext(Dispatchers.IO) { GeminiApi.testApiConnection(settings) }
+                    apiTestReport = res
+                    testingApi = false
+                }
+            },
+            enabled = !testingApi,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (testingApi) "測試連線中…" else "🔍 測試 API 連線並診斷錯誤（自動列可用模型）")
+        }
+        if (apiTestReport.isNotBlank()) {
+            Surface(
+                tonalElevation = 3.dp,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(apiTestReport, style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = {
+                        val cm = settingsCtx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("api_diag", apiTestReport))
+                    }) {
+                        Text("複製完整診斷結果")
+                    }
+                }
+            }
+        }
 
         Text("翻譯輸出語言／風格", style = MaterialTheme.typography.labelMedium)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

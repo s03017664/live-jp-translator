@@ -84,9 +84,14 @@ object GeminiApi {
             audioInputTokens = res.audioInputTokens,
             secondsTranslated = durationSec
         )
-        val parsed = JSONObject(res.text)
-        val orig = parsed.optString("orig", parsed.optString("jp", ""))
-        val trans = parsed.optString("trans", parsed.optString("zh", ""))
+        val trimmedRes = res.text.trim()
+        val parsed = if (trimmedRes.startsWith("[")) {
+            JSONArray(trimmedRes).optJSONObject(0) ?: JSONObject()
+        } else {
+            JSONObject(trimmedRes)
+        }
+        val orig = parsed.optString("orig", parsed.optString("original", parsed.optString("jp", "")))
+        val trans = parsed.optString("trans", parsed.optString("translation", parsed.optString("zh", "")))
         orig to trans
     }
 
@@ -305,9 +310,90 @@ object GeminiApi {
         throw lastError ?: IllegalStateException("未知網路錯誤")
     }
 
+    fun testApiConnection(s: AppSettings): String {
+        val cleanKey = s.apiKey.trim()
+        if (cleanKey.isBlank()) return "❌ 請先填寫 Gemini API Key"
+        val cleanBase = s.baseUrl.trim().trimEnd('/')
+        val cleanModel = s.model.trim()
+        val endpoint = "$cleanBase/v1beta/models/$cleanModel:generateContent"
+        return runCatching {
+            val body = JSONObject().apply {
+                put("contents", JSONArray().put(JSONObject().apply {
+                    put("parts", JSONArray().put(JSONObject().put("text", "Reply OK")))
+                }))
+            }
+            val conn = (URL("$endpoint?key=$cleanKey").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                connectTimeout = 9000
+                readTimeout = 15000
+                doOutput = true
+            }
+            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val respText = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.readText() ?: ""
+            if (code in 200..299) {
+                TranslatorState.lastApiError.value = ""
+                val reply = runCatching {
+                    JSONObject(respText).getJSONArray("candidates").getJSONObject(0)
+                        .getJSONObject("content").getJSONArray("parts")
+                        .getJSONObject(0).getString("text").trim()
+                }.getOrDefault("OK")
+                "✅ 連線成功！\n模型：$cleanModel\n網址：$endpoint\n回應：$reply"
+            } else {
+                val errObj = runCatching { JSONObject(respText).optJSONObject("error") }.getOrNull()
+                val errMsg = errObj?.optString("message")?.takeIf { it.isNotBlank() }
+                val errStatus = errObj?.optString("status")?.takeIf { it.isNotBlank() }
+                val sb = StringBuilder()
+                sb.append("❌ HTTP $code")
+                if (errStatus != null) sb.append(" ($errStatus)")
+                sb.append("\n模型：$cleanModel")
+                sb.append("\n網址：$endpoint")
+                sb.append("\n完整原因：${errMsg ?: respText.replace("\r", "").trim().take(350).ifBlank { "(空回應)" }}")
+                if (code == 404) {
+                    val modelsList = fetchAvailableModels(cleanBase, cleanKey)
+                    if (modelsList.isNotBlank()) {
+                        sb.append("\n\n📋 此 API Key 可用模型：\n$modelsList")
+                    }
+                }
+                val report = sb.toString()
+                TranslatorState.lastApiError.value = report
+                report
+            }
+        }.getOrElse { e ->
+            val msg = "❌ 網路或程式例外：${e.javaClass.simpleName}: ${e.message}\n網址：$endpoint"
+            TranslatorState.lastApiError.value = msg
+            msg
+        }
+    }
+
+    private fun fetchAvailableModels(cleanBase: String, cleanKey: String): String = runCatching {
+        val conn = (URL("$cleanBase/v1beta/models?key=$cleanKey").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8000
+            readTimeout = 10000
+        }
+        if (conn.responseCode !in 200..299) return@runCatching "(查詢模型清單失敗: HTTP ${conn.responseCode})"
+        val text = conn.inputStream.bufferedReader().readText()
+        val arr = JSONObject(text).optJSONArray("models") ?: return@runCatching ""
+        val names = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            val m = arr.optJSONObject(i) ?: continue
+            val methods = m.optJSONArray("supportedGenerationMethods")?.toString() ?: ""
+            if (methods.contains("generateContent")) {
+                val rawName = m.optString("name", "").removePrefix("models/")
+                if (rawName.contains("gemini")) names.add(rawName)
+            }
+        }
+        names.take(10).joinToString("\n") { "• $it" }
+    }.getOrElse { "(無法查詢模型清單: ${it.message})" }
+
     private fun postGemini(s: AppSettings, modelName: String, body: JSONObject, estimatedAudioSec: Int): GeminiRawResult {
-        val cleanBase = s.baseUrl.trimEnd('/')
-        val url = URL("$cleanBase/v1beta/models/$modelName:generateContent?key=${s.apiKey.trim()}")
+        val cleanBase = s.baseUrl.trim().trimEnd('/')
+        val cleanModel = modelName.trim()
+        val endpoint = "$cleanBase/v1beta/models/$cleanModel:generateContent"
+        val url = URL("$endpoint?key=${s.apiKey.trim()}")
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
@@ -320,7 +406,22 @@ object GeminiApi {
         val code = conn.responseCode
         val respText = (if (code in 200..299) conn.inputStream else conn.errorStream)
             ?.bufferedReader()?.readText() ?: ""
-        if (code !in 200..299) error("API $code: ${respText.take(70)}")
+        if (code !in 200..299) {
+            val errObj = runCatching { JSONObject(respText).optJSONObject("error") }.getOrNull()
+            val errMsg = errObj?.optString("message")?.takeIf { it.isNotBlank() }
+            val errStatus = errObj?.optString("status")?.takeIf { it.isNotBlank() }
+            val detail = buildString {
+                append("HTTP $code")
+                if (errStatus != null) append(" ($errStatus)")
+                append("\n模型：$cleanModel")
+                append("\n網址：$endpoint")
+                append("\n原因：")
+                append(errMsg ?: respText.replace("\r", "").trim().take(300).ifBlank { "(空回應)" })
+            }
+            TranslatorState.lastApiError.value = detail
+            error(detail)
+        }
+        TranslatorState.lastApiError.value = ""
 
         val root = JSONObject(respText)
         val usageMeta = root.optJSONObject("usageMetadata")

@@ -45,10 +45,10 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/release/app-release.apk dist/LiveJPTranslator-v1.8.0.apk
+          cp android/app/build/outputs/apk/release/app-release.apk dist/LiveJPTranslator-v1.8.1.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LiveJPTranslator-v1.8.0
-          path: dist/LiveJPTranslator-v1.8.0.apk
+          name: LiveJPTranslator-v1.8.1
+          path: dist/LiveJPTranslator-v1.8.1.apk

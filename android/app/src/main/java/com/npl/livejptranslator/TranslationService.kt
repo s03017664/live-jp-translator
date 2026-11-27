@@ -166,7 +166,7 @@ class TranslationService : Service() {
 
         val profileTag = TranslatorState.activeProfile()?.name?.let { " · $it" } ?: ""
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("直播即時譯 v1.8.0 運作中")
+            .setContentTitle("直播即時譯 v1.8.1 運作中")
             .setContentText("即時翻譯：${settings.sourceLanguage.label}$profileTag")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .build()
@@ -1039,7 +1039,10 @@ class TranslationService : Service() {
                         updateOverlayUi("● 智能聆聽中…", null, null)
                     }
                 }.onFailure { err ->
-                    updateOverlayUi("⚠ ${err.message?.take(34)}", null, null)
+                    val fullMsg = err.message ?: "未知錯誤"
+                    TranslatorState.lastApiError.value = fullMsg
+                    val headline = fullMsg.lineSequence().firstOrNull()?.take(36) ?: "API 錯誤"
+                    updateOverlayUi("⚠ $headline", "完整錯誤（可到主控台複製）", fullMsg)
                 }
             }
         }
