@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>直播即時譯 v1.8.0</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <style>
+    :root { --bg:#f4f6fb; --card:#ffffff; --text:#0f172a; --muted:#475569; --accent:#4338ca; --border:#dce3f0; }
+    [data-theme="dark"] { --bg:#0b1120; --card:#111827; --text:#f1f5f9; --muted:#94a3b8; --accent:#818cf8; --border:#1e293b; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+    header { display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-bottom:1px solid var(--border); background:var(--card); position:sticky; top:0; z-index:10; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.05rem; }
+    .grid { display:grid; grid-template-columns:1fr 1.25fr; gap:16px; padding:16px; max-width:1380px; margin:auto; }
+    @media (max-width:860px){ .grid{ grid-template-columns:1fr; } }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:14px; }
+    .live-box { background:linear-gradient(135deg,#1e1b4b,#0f172a); color:#fff; border-radius:14px; padding:16px; min-height:118px; margin-bottom:12px; border:2px solid transparent; user-select:none; }
+    .live-box.locked { border-color:#f59e0b; }
+    .orig { color:#cbd5e1; font-size:0.92rem; margin-bottom:6px; }
+    .trans { font-size:1.35rem; font-weight:700; line-height:1.45; }
+    .cost-meter { background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:10px; }
+    .bar-bg { width:100%; height:6px; background:var(--border); border-radius:4px; overflow:hidden; margin:6px 0; }
+    .bar-fill { height:100%; background:var(--accent); transition:width 0.3s; }
+    .quick-tray, .reply-bar { display:none; gap:8px; padding-top:10px; margin-top:10px; border-top:1px solid #334155; }
+    .quick-tray.open { display:flex; overflow-x:auto; }
+    .reply-bar.open { display:flex; align-items:center; }
+    .pill { white-space:nowrap; background:#334155; color:#fff; border:1px solid #6366f1; padding:6px 12px; border-radius:20px; font-size:0.82rem; cursor:pointer; }
+    .mini-dot { position:fixed; right:20px; bottom:24px; width:54px; height:54px; border-radius:50%; background:#1e1b4b; color:#fff; border:2px solid #38bdf8; display:none; align-items:center; justify-content:center; font-weight:700; font-size:1.1rem; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.35); z-index:99; }
+    input, select, textarea, button { width:100%; padding:9px 11px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); margin-top:6px; font-size:0.9rem; }
+    button { cursor:pointer; font-weight:600; background:var(--accent); color:#fff; border:none; }
+    button.sec { background:transparent; color:var(--text); border:1px solid var(--border); width:auto; padding:6px 11px; }
+    button.chip { background:var(--bg); color:var(--text); border:1px solid var(--border); width:auto; padding:6px 12px; border-radius:20px; font-size:0.83rem; }
+    button.chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+    .session-card { border:1px solid var(--border); border-radius:12px; margin-bottom:10px; background:var(--bg); overflow:hidden; }
+    .session-head { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; cursor:pointer; gap:8px; flex-wrap:wrap; }
+    .session-body { padding:0 12px 10px; border-top:1px solid var(--border); }
+    .hist-item { border-bottom:1px solid var(--border); padding:8px 0; display:flex; gap:6px; align-items:flex-start; }
+    label { display:block; margin-top:10px; font-size:0.84rem; color:var(--muted); }
+    pre.summary { white-space:pre-wrap; font-family:inherit; background:var(--card); padding:10px; border-radius:10px; border:1px solid var(--border); font-size:0.88rem; line-height:1.55; margin-top:8px; }
+    .flashcard-box { background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:16px; text-align:center; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><img src="icon.svg" width="28" height="28" alt="icon" />直播即時譯 v1.8.0</div>
+    <div class="row" style="margin:0">
+      <button class="sec" onclick="toggleTheme()">深淺色</button>
+      <button class="sec" onclick="exportJson()">匯出 JSON</button>
+      <button class="sec" onclick="exportCsv()">匯出 CSV</button>
+      <button class="sec" onclick="document.getElementById('imp').click()">匯入 JSON</button>
+      <input id="imp" type="file" accept=".json" style="display:none" onchange="importJson(event)" />
+    </div>
+  </header>
+
+  <div id="miniDot" class="mini-dot" onclick="setMini(false)" title="點擊還原字幕視窗">譯</div>
+
+  <main class="grid" id="mainGrid">
+    <div>
+      <section class="card">
+        <div class="live-box" id="liveBox" ondblclick="toggleLock()" title="雙擊鎖定／解鎖字幕框">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:5px;flex-wrap:wrap;">
+            <span id="status" style="font-size:12px;color:#38bdf8;">● 準備就緒</span>
+            <span id="overlayCost" style="font-size:11px;color:#fde68a;background:#292524;padding:2px 7px;border-radius:8px;">本場$0.00 · 餘$40.00</span>
+            <div class="row" style="margin:0">
+              <button class="sec" id="liveStarBtn" style="color:#cbd5e1;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="starLatest()">☆</button>
+              <button class="sec" id="voiceReplyBtn" style="color:#fca5a5;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleVoiceReply()">🎤粵語覆</button>
+              <button class="sec" id="dubBtn" style="color:#94a3b8;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleDubbing()">🔇粵配</button>
+              <button class="sec" style="color:#6ee7b7;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleQuickTray()">💬快貼</button>
+              <button class="sec" style="color:#f472b6;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleReplyBar()">⌨譯</button>
+              <button class="sec" style="color:#fff;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleOrig()">雙語</button>
+              <button class="sec" id="lockBtn" style="color:#cbd5e1;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="toggleLock()">🔓</button>
+              <button class="sec" style="color:#94a3b8;border-color:#334155;padding:3px 7px;font-size:12px;" onclick="setMini(true)">—</button>
+            </div>
+          </div>
+          <div id="liveOrig" class="orig"></div>
+          <div id="liveTrans" class="trans">按下方按鈕選擇直播分頁（實時顯示 API Token 花費與剩餘額度）</div>
+          <div id="quickTray" class="quick-tray"></div>
+          <div id="replyBar" class="reply-bar">
+            <input id="replyInput" placeholder="打中文即時翻日文並自動複製…" style="margin:0;flex:1;background:#1e293b;color:#fff;border-color:#6366f1;" onkeydown="if(event.key==='Enter')sendQuickReply()" />
+            <button id="replySendBtn" style="width:auto;margin:0;padding:8px 12px;" onclick="sendQuickReply()">翻並複製</button>
+          </div>
+        </div>
+
+        <div class="cost-meter">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <strong id="remText" style="color:var(--accent);font-size:0.95rem;">剩餘額度：HK$40.00</strong>
+            <span id="spentText" style="font-size:0.82rem;color:var(--muted);">本場：HK$0.000 · 今日：HK$0.000</span>
+          </div>
+          <div class="bar-bg"><div id="remBar" class="bar-fill" style="width:100%"></div></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;font-size:0.78rem;color:var(--muted);">
+            <span id="tokText">今日 Tokens：0</span>
+            <div class="row" style="margin:0">
+              <button class="sec" style="padding:3px 8px;font-size:11px;" onclick="topUpHkd(40)">+HK$40</button>
+              <button class="sec" style="padding:3px 8px;font-size:11px;" onclick="adjustBalance()">校正餘額／Pro贈金</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="toggleBtn" onclick="toggleCapture()">開始擷取分頁聲音並翻譯</button>
+
+        <label>多主播詞彙設定檔（Profiles，一鍵換台切換）</label>
+        <div id="profileBar" class="row"></div>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>來源語言</label>
+            <select id="sourceLanguage" onchange="saveCfg();renderQuickTray()">
+              <option value="JAPANESE">日語（日本直播）</option>
+              <option value="AUTO">自動偵測（多語言）</option>
+              <option value="ENGLISH">英語 (English)</option>
+              <option value="KOREAN">韓語 (한국어)</option>
+              <option value="THAI">泰語 (ภาษาไทย)</option>
+              <option value="MANDARIN">國語／普通話</option>
+              <option value="FRENCH">法語 (Français)</option>
+              <option value="SPANISH">西班牙語 (Español)</option>
+            </select>
+          </div>
+          <div style="flex:1">
+            <label>輸出翻譯風格</label>
+            <select id="style" onchange="saveCfg()">
+              <option value="CANTONESE">地道香港廣東話</option>
+              <option value="TRADITIONAL_CHINESE">自然繁體中文</option>
+              <option value="ENGLISH">Natural English</option>
+            </select>
+          </div>
+        </div>
+
+        <label>Gemini API Key</label>
+        <input id="apiKey" type="password" placeholder="貼上你的 Gemini API Key" onchange="saveCfg()" />
+        <div class="row">
+          <div style="flex:1">
+            <label>AI 模型</label>
+            <select id="model" onchange="saveCfg()">
+              <option value="gemini-2.5-flash-lite">極速省錢 (Flash-Lite)</option>
+              <option value="gemini-2.5-flash">超高準度 (Flash)</option>
+            </select>
+          </div>
+          <div style="flex:1">
+            <label>配音語速</label>
+            <select id="dubSpeed" onchange="saveCfg()">
+              <option value="1.0">1.0x 標準</option>
+              <option value="1.25" selected>1.25x 推薦（追貼直播）</option>
+              <option value="1.5">1.5x 快速</option>
+            </select>
+          </div>
+        </div>
+        <label>API Base URL</label>
+        <input id="baseUrl" value="https://generativelanguage.googleapis.com" onchange="saveCfg()" />
+        <div class="row">
+          <label style="margin:0;flex:1;"><input id="showFurigana" type="checkbox" checked style="width:auto;margin-right:6px;" onchange="saveCfg()" />日文漢字標平假名 (振り仮名)</label>
+          <label style="margin:0;flex:1;"><input id="smartVad" type="checkbox" checked style="width:auto;margin-right:6px;" onchange="saveCfg()" />智能停頓斷句 (350ms)</label>
+          <label style="margin:0;flex:1;"><input id="overlapOn" type="checkbox" checked style="width:auto;margin-right:6px;" onchange="saveCfg()" />防漏字重疊 (0.5s)</label>
+        </div>
+        <label>全域補充詞彙表</label>
+        <textarea id="glossary" rows="2" onchange="saveCfg()"></textarea>
+      </section>
+
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong>生字卡溫習模式（Flashcards）</strong>
+          <span id="cardCounter" style="font-size:0.82rem;color:var(--muted);">0 張</span>
+        </div>
+        <div id="flashcardContainer" class="flashcard-box">收藏 ⭐ 金句或生成 AI 總結後，會自動建立生字卡。</div>
+      </section>
+    </div>
+
+    <div>
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <strong>場次字幕紀錄（🎓拆解 · 🔊發音 · ⬇匯出 .md）</strong>
+          <div class="row" style="margin:0">
+            <button class="sec" id="starFilterBtn" onclick="toggleStarFilter()">☆ 只看收藏</button>
+            <button class="sec" onclick="historyData=[];renderHistory();saveCfg()">清空全部</button>
+          </div>
+        </div>
+        <input id="searchBox" placeholder="搜尋字幕關鍵字或主播名…" oninput="renderHistory()" />
+        <div id="histList" style="max-height:74vh;overflow:auto;margin-top:10px;"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+    const DEFAULT_PHRASES = [
+      { id:1, text:'初見です！よろしくお願いします！', meaning:'第一次看！請多指教', langCode:'JA' },
+      { id:2, text:'こんにちは！', meaning:'你好！', langCode:'JA' },
+      { id:3, text:'こんばんは！', meaning:'晚上好！', langCode:'JA' },
+      { id:4, text:'草', meaning:'好好笑', langCode:'JA' },
+      { id:5, text:'かわいい！', meaning:'好可愛！', langCode:'JA' },
+      { id:6, text:'香港から見てます！🇭🇰', meaning:'我喺香港睇緊！', langCode:'JA' },
+      { id:7, text:'応援してます！頑張って！', meaning:'支持你！加油！', langCode:'JA' },
+      { id:8, text:'お疲れ様でした！また来ます！', meaning:'辛苦了！下次再來', langCode:'JA' },
+      { id:9, text:'Hello from Hong Kong! 🇭🇰', meaning:'香港觀眾打招呼', langCode:'EN' },
+      { id:10, text:'안녕하세요! 홍콩에서 보고 있어요!', meaning:'你好！香港睇緊！', langCode:'KO' }
+    ];
+    const DEFAULT_PROFILES = [
+      { id:1, name:'ミクチャ／日語雜談台', glossary:'ミクチャ(MixChannel)、ふわっち、初見(第一次看)、枠(直播間)、コメント(留言)、推し(推的主播)', language:'JAPANESE' }
+    ];
+    const LANG_HINT = {
+      JAPANESE:'日語（日本直播口語與潮語）', AUTO:'自動偵測講者語言', ENGLISH:'英語口語',
+      KOREAN:'韓語口語', THAI:'泰語口語', MANDARIN:'國語／普通話', FRENCH:'法語', SPANISH:'西班牙語'
+    };
+    const TTS_MAP = { JA:'ja-JP', EN:'en-US', KO:'ko-KR', TH:'th-TH', FR:'fr-FR', ES:'es-ES', ZH:'zh-TW' };
+
+    let stream = null, audioCtx = null, processor = null, isPaused = false;
+    let voiceRec = null, voiceChunks = [], voiceStream = null;
+    let historyData = [], flashcards = [], profiles = [...DEFAULT_PROFILES], activeProfileId = 1, sessionSummaries = {};
+    let showOrig = true, starredOnly = false, isLocked = false, liveDubbing = false, expandedDates = {}, latestId = null;
+    let cardIdx = 0, cardRevealed = false;
+
+    // Billing & Real-time Token Ledger
+    let billing = { initialBalanceHkd: 40.0, monthlyProCreditUsd: 0.0, usdToHkdRate: 7.80, totalSpentUsd: 0.0, todayDate: '', todayCostUsd: 0.0, todayTokens: 0, sessionCostUsd: 0.0 };
+
+    function todayStr() { return new Date().toISOString().slice(0,10); }
+    function getActiveProfile() { return profiles.find(p => p.id === activeProfileId) || null; }
+    function stripFurigana(t) { return (t || '').replace(/[\(（][ぁ-んァ-ンー]+[\)）]/g, ''); }
+
+    function calcUsdFromMeta(meta, modelName, audioSec = 0) {
+      const pTok = meta?.promptTokenCount || (audioSec * 32 + 180);
+      const oTok = meta?.candidatesTokenCount || 40;
+      let audioTok = 0;
+      if (Array.isArray(meta?.promptTokensDetails)) {
+        meta.promptTokensDetails.forEach(d => { if (d.modality === 'AUDIO') audioTok += (d.tokenCount || 0); });
+      }
+      if (!audioTok && audioSec > 0) audioTok = Math.min(pTok, audioSec * 32);
+      const textTok = Math.max(0, pTok - audioTok);
+
+      let usd = 0;
+      if (modelName.includes('flash-lite')) {
+        usd = (pTok * 0.10 + oTok * 0.40) / 1_000_000;
+      } else {
+        usd = (audioTok * 1.00 + textTok * 0.30 + oTok * 2.50) / 1_000_000;
+      }
+      return { usd, tokens: pTok + oTok };
+    }
+
+    function recordApiUsage(meta, modelName, audioSec = 0) {
+      const { usd, tokens } = calcUsdFromMeta(meta, modelName, audioSec);
+      const t = todayStr();
+      if (billing.todayDate !== t) { billing.todayDate = t; billing.todayCostUsd = 0; billing.todayTokens = 0; }
+      billing.todayCostUsd += usd;
+      billing.todayTokens += tokens;
+      billing.sessionCostUsd += usd;
+      billing.totalSpentUsd += usd;
+      renderBilling();
+      saveCfg();
+    }
+
+    function renderBilling() {
+      const rate = billing.usdToHkdRate || 7.80;
+      const poolHkd = billing.initialBalanceHkd + (billing.monthlyProCreditUsd * rate);
+      const remHkd = Math.max(0, poolHkd - billing.totalSpentUsd * rate);
+      const sessHkd = billing.sessionCostUsd * rate;
+      const todayHkd = billing.todayCostUsd * rate;
+      const pct = poolHkd > 0 ? Math.max(0, Math.min(100, (remHkd / poolHkd) * 100)) : 0;
+
+      remText.textContent = `剩餘額度：HK$${remHkd.toFixed(2)}`;
+      spentText.textContent = `本場：HK$${sessHkd.toFixed(3)} · 今日：HK$${todayHkd.toFixed(3)}`;
+      tokText.textContent = `今日 Tokens：${billing.todayTokens.toLocaleString()}`;
+      remBar.style.width = `${pct}%`;
+      overlayCost.textContent = `本場$${sessHkd.toFixed(2)} · 餘$${remHkd.toFixed(2)}`;
+    }
+
+    function topUpHkd(add) {
+      billing.initialBalanceHkd += add;
+      renderBilling(); saveCfg();
+    }
+
+    function adjustBalance() {
+      const b = prompt('輸入目前預付本金 (HKD)：', billing.initialBalanceHkd.toFixed(2));
+      if (b === null) return;
+      const p = prompt('輸入 Pro 每月免費 API 贈金 (USD，無則填 0)：', billing.monthlyProCreditUsd.toFixed(2));
+      if (p === null) return;
+      if (confirm('按「確定」將已扣花費歸零並以新輸入金額作為最新剩餘額度；按「取消」保留累計花費。')) {
+        billing.totalSpentUsd = 0; billing.todayCostUsd = 0; billing.todayTokens = 0; billing.sessionCostUsd = 0;
+      }
+      billing.initialBalanceHkd = Math.max(0, parseFloat(b) || 0);
+      billing.monthlyProCreditUsd = Math.max(0, parseFloat(p) || 0);
+      renderBilling(); saveCfg();
+    }
+
+    document.addEventListener('keydown', e => {
+      const tag = document.activeElement?.tagName;
+      if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+        e.preventDefault();
+        if (stream) {
+          isPaused = !isPaused;
+          status.textContent = isPaused ? '⏸ 已暫停（按 Space 繼續）' : '● 繼續聆聽中…';
+        }
+      }
+    });
+
+    function speakOriginal(raw, langCode) {
+      const clean = stripFurigana(raw).trim(); if (!clean) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = TTS_MAP[(langCode||'JA').toUpperCase()] || 'ja-JP';
+      u.rate = 0.95;
+      speechSynthesis.speak(u);
+    }
+
+    function speakDubbing(text) {
+      if (!liveDubbing || !text || isPaused) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const voices = speechSynthesis.getVoices();
+      if (style.value === 'CANTONESE') {
+        u.lang = 'zh-HK';
+        const hk = voices.find(v => /zh-HK|yue/i.test(v.lang));
+        if (hk) u.voice = hk;
+      } else if (style.value === 'ENGLISH') {
+        u.lang = 'en-US';
+      } else {
+        u.lang = 'zh-TW';
+      }
+      u.rate = parseFloat(dubSpeed.value || '1.25');
+      speechSynthesis.speak(u);
+    }
+
+    function toggleDubbing() {
+      liveDubbing = !liveDubbing;
+      dubBtn.textContent = liveDubbing ? '🔊粵配開' : '🔇粵配';
+      dubBtn.style.color = liveDubbing ? '#34d399' : '#94a3b8';
+      if (!liveDubbing) speechSynthesis.cancel();
+      saveCfg();
+    }
+
+    function addFlashcardFromItem(item) {
+      const term = stripFurigana(item.original).trim() || item.translated;
+      if (!term || flashcards.some(c => c.term === term)) return;
+      flashcards.unshift({
+        id: item.id, term, reading: item.original, meaning: item.translated,
+        example: item.original, langCode: item.langCode || 'JA', masteredCount: 0
+      });
+      renderFlashcards();
+    }
+
+    function renderFlashcards() {
+      cardCounter.textContent = `${flashcards.length} 張`;
+      if (!flashcards.length) {
+        flashcardContainer.innerHTML = '收藏 ⭐ 金句或生成 AI 總結後，會自動建立生字卡。';
+        return;
+      }
+      cardIdx = Math.min(cardIdx, flashcards.length - 1);
+      const c = flashcards[cardIdx];
+      flashcardContainer.innerHTML = `
+        <div style="font-size:0.78rem;color:var(--muted);">第 ${cardIdx+1} / ${flashcards.length} 張 · 已熟讀 ${c.masteredCount} 次</div>
+        <div style="font-size:1.25rem;font-weight:700;margin:8px 0 4px;">${c.term}</div>
+        <div style="font-size:0.85rem;color:var(--muted);">${c.reading && c.reading!==c.term ? c.reading : ''}</div>
+        <div style="margin:12px 0;padding:10px;border-radius:10px;background:var(--card);border:1px solid var(--border);">
+          ${cardRevealed ? `<div style="font-weight:700;color:var(--accent);">${c.meaning}</div>` : `<button class="sec" onclick="cardRevealed=true;renderFlashcards()">顯示意思</button>`}
+        </div>
+        <div class="row" style="justify-content:center;">
+          <button class="sec" onclick="speakOriginal('${(c.reading||c.term).replace(/'/g,"\\'")}','${c.langCode}')">🔊 朗讀</button>
+          <button class="sec" onclick="cardRevealed=false;cardIdx=(cardIdx-1+flashcards.length)%flashcards.length;renderFlashcards()">上一張</button>
+          <button class="sec" onclick="flashcards[cardIdx].masteredCount=(flashcards[cardIdx].masteredCount||0)+1;cardRevealed=false;cardIdx=(cardIdx+1)%flashcards.length;renderFlashcards();saveCfg()">熟讀＋下一張</button>
+        </div>`;
+    }
+
+    async function explainItem(id) {
+      const item = historyData.find(x => x.id === id);
+      if (!item) return;
+      if (!apiKey.value.trim()) return alert('請先填寫 Gemini API Key');
+      status.textContent = '🎓 AI 正在拆解文法與潮語…';
+      const prompt = `請用簡潔繁體中文（香港口語風格）拆解以下直播句子：
+原文：${item.original}
+翻譯：${item.translated}
+1. 句意與語氣
+2. 關鍵詞／潮語／縮寫
+3. 自然替換例句`;
+      try {
+        const res = await fetch(`${baseUrl.value.replace(/\/$/,'')}/v1beta/models/${model.value}:generateContent?key=${apiKey.value.trim()}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } })
+        });
+        const data = await res.json();
+        recordApiUsage(data.usageMetadata, model.value, 0);
+        const ans = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        alert(`【文法與潮語拆解】
+${item.original}
+
+${ans}`);
+        status.textContent = '● 準備就緒';
+      } catch (e) { status.textContent = '⚠ 拆解失敗：' + e.message; }
+    }
+
+    async function toggleVoiceReply() {
+      if (voiceRec && voiceRec.state === 'recording') {
+        voiceRec.stop();
+        voiceReplyBtn.textContent = '🎤粵語覆'; voiceReplyBtn.style.color = '#fca5a5';
+        return;
+      }
+      if (!apiKey.value.trim()) return alert('請先填寫 Gemini API Key');
+      try {
+        voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        voiceChunks = [];
+        voiceRec = new MediaRecorder(voiceStream);
+        voiceRec.ondataavailable = e => e.data.size && voiceChunks.push(e.data);
+        voiceRec.onstop = async () => {
+          voiceStream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(voiceChunks, { type: voiceRec.mimeType || 'audio/webm' });
+          const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result.split(',')[1]); fr.readAsDataURL(blob); });
+          status.textContent = '● 粵語語音翻日文留言中…';
+          const prof = getActiveProfile();
+          const target = sourceLanguage.value === 'AUTO' ? '日語（日本直播口語）' : LANG_HINT[sourceLanguage.value];
+          const prompt = `用戶用香港廣東話講了一句想同主播講嘅留言，請翻成自然親切嘅直播間「${target}」短句${prof?'（主播：'+prof.name+'）':''}。只輸出 JSON：{"heard":"聽到嘅廣東話","reply":"目標語留言"}`;
+          try {
+            const res = await fetch(`${baseUrl.value.replace(/\/$/,'')}/v1beta/models/${model.value}:generateContent?key=${apiKey.value.trim()}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: blob.type || 'audio/webm', data: b64 } }] }], generationConfig: { temperature: 0.35, responseMimeType: 'application/json' } })
+            });
+            const data = await res.json();
+            recordApiUsage(data.usageMetadata, model.value, 3);
+            const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+            const obj = JSON.parse(txt.replace(/```json|```/g,'').trim());
+            if (obj.reply) { navigator.clipboard.writeText(obj.reply); status.textContent = `✓ 已複製：${obj.reply}`; }
+            else status.textContent = '● 聽唔清楚，請再試';
+          } catch (e) { status.textContent = '⚠ 語音翻留言失敗：' + e.message; }
+        };
+        voiceRec.start();
+        voiceReplyBtn.textContent = '🔴點我停'; voiceReplyBtn.style.color = '#fb7185';
+        status.textContent = '🎤 錄緊廣東話，講完再點一下「🔴點我停」即翻…';
+      } catch (e) { alert('無法啟用咪高峰：' + e.message); }
+    }
+
+    function loadCfg() {
+      const saved = JSON.parse(localStorage.getItem('live_jp_web') || '{}');
+      ['apiKey','model','baseUrl','sourceLanguage','style','glossary','dubSpeed'].forEach(k => { if (saved[k]) document.getElementById(k).value = saved[k]; });
+      if (typeof saved.smartVad === 'boolean') smartVad.checked = saved.smartVad;
+      if (typeof saved.overlapOn === 'boolean') overlapOn.checked = saved.overlapOn;
+      if (typeof saved.showFurigana === 'boolean') showFurigana.checked = saved.showFurigana;
+      if (typeof saved.liveDubbing === 'boolean') { liveDubbing = saved.liveDubbing; dubBtn.textContent = liveDubbing ? '🔊粵配開' : '🔇粵配'; dubBtn.style.color = liveDubbing ? '#34d399' : '#94a3b8'; }
+      if (typeof saved.activeProfileId === 'number') activeProfileId = saved.activeProfileId;
+      if (Array.isArray(saved.profiles) && saved.profiles.length) profiles = saved.profiles;
+      if (Array.isArray(saved.flashcards)) flashcards = saved.flashcards;
+      if (saved.billing) {
+        billing = { ...billing, ...saved.billing, sessionCostUsd: 0 };
+        if (billing.todayDate !== todayStr()) { billing.todayDate = todayStr(); billing.todayCostUsd = 0; billing.todayTokens = 0; }
+      }
+      sessionSummaries = saved.sessionSummaries || {};
+      historyData = (saved.history || []).map(x => ({
+        id: x.id, date: x.date || '較早紀錄', time: x.time || '',
+        original: x.original ?? x.japanese ?? '', translated: x.translated ?? x.chinese ?? '',
+        langCode: x.langCode || 'JA', profileName: x.profileName || '', starred: !!x.starred
+      }));
+      if (historyData.length) latestId = historyData[0].id;
+      if (saved.theme) document.documentElement.dataset.theme = saved.theme;
+      renderProfiles(); renderQuickTray(); renderHistory(); renderFlashcards(); renderBilling(); syncLiveStarBtn();
+    }
+
+    function saveCfg() {
+      localStorage.setItem('live_jp_web', JSON.stringify({
+        apiKey: apiKey.value, model: model.value, baseUrl: baseUrl.value,
+        sourceLanguage: sourceLanguage.value, style: style.value, activeProfileId,
+        smartVad: smartVad.checked, overlapOn: overlapOn.checked, showFurigana: showFurigana.checked,
+        liveDubbing, dubSpeed: dubSpeed.value, billing,
+        glossary: glossary.value, profiles, flashcards, sessionSummaries, history: historyData,
+        theme: document.documentElement.dataset.theme || 'light'
+      }));
+    }
+
+    function toggleTheme() { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; saveCfg(); }
+    function toggleOrig() { showOrig = !showOrig; liveOrig.style.display = showOrig ? 'block' : 'none'; }
+    function toggleQuickTray() { replyBar.classList.remove('open'); quickTray.classList.toggle('open'); }
+    function toggleReplyBar() { quickTray.classList.remove('open'); replyBar.classList.toggle('open'); if (replyBar.classList.contains('open')) replyInput.focus(); }
+    function setMini(on) { mainGrid.style.display = on ? 'none' : 'grid'; miniDot.style.display = on ? 'flex' : 'none'; }
+    function toggleLock() {
+      isLocked = !isLocked; liveBox.classList.toggle('locked', isLocked);
+      lockBtn.textContent = isLocked ? '🔒' : '🔓';
+      status.textContent = isLocked ? '🔒 已鎖定字幕框（雙擊解鎖）' : '🔓 已解鎖字幕框';
+    }
+    function toggleStarFilter() { starredOnly = !starredOnly; starFilterBtn.textContent = starredOnly ? '★ 只看收藏' : '☆ 只看收藏'; renderHistory(); }
+    function copyText(t) { navigator.clipboard.writeText(t); status.textContent = '✓ 已複製：' + t.slice(0, 14); quickTray.classList.remove('open'); }
+
+    function syncLiveStarBtn() {
+      const item = historyData.find(x => x.id === latestId);
+      const starred = !!(item && item.starred);
+      liveStarBtn.textContent = starred ? '★' : '☆';
+      liveStarBtn.style.color = starred ? '#fbbf24' : '#cbd5e1';
+    }
+    function starLatest() {
+      if (!latestId && historyData.length) latestId = historyData[0].id;
+      if (!latestId) return alert('暫未有字幕可收藏');
+      toggleStar(latestId);
+      syncLiveStarBtn();
+      status.textContent = liveStarBtn.textContent === '★' ? '⭐ 已收藏並加入生字卡' : '已取消收藏';
+    }
+
+    async function sendQuickReply() {
+      const txt = replyInput.value.trim(); if (!txt) return;
+      if (!apiKey.value.trim()) return alert('請先填寫 Gemini API Key');
+      replySendBtn.textContent = '翻譯中…'; replySendBtn.disabled = true;
+      const prof = getActiveProfile();
+      const target = sourceLanguage.value === 'AUTO' ? '日語（自然直播口語）' : LANG_HINT[sourceLanguage.value];
+      const prompt = `將以下中文留言翻成自然親切的直播間「${target}」短句${prof ? '（主播：'+prof.name+'，詞庫：'+prof.glossary+'）' : ''}，只輸出翻譯句子本身：\n${txt}`;
+      try {
+        const res = await fetch(`${baseUrl.value.replace(/\/$/,'')}/v1beta/models/${model.value}:generateContent?key=${apiKey.value.trim()}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4 } })
+        });
+        const data = await res.json();
+        recordApiUsage(data.usageMetadata, model.value, 0);
+        const out = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+        if (out) { navigator.clipboard.writeText(out); replyInput.value = ''; replyBar.classList.remove('open'); status.textContent = '✓ 已複製留言：' + out.slice(0,18); }
+      } catch (e) { status.textContent = '⚠ 翻譯留言失敗：' + e.message; }
+      replySendBtn.textContent = '翻並複製'; replySendBtn.disabled = false;
+    }
+
+    function renderProfiles() {
+      let html = `<button class="chip ${activeProfileId===0?'active':''}" onclick="selectProfile(0)">通用詞庫</button>`;
+      profiles.forEach(p => {
+        html += `<button class="chip ${activeProfileId===p.id?'active':''}" onclick="selectProfile(${p.id})" oncontextmenu="deleteProfile(${p.id});return false;" title="右鍵可刪除">${p.name}</button>`;
+      });
+      html += `<button class="chip" onclick="addProfile()">＋ 新增主播</button>`;
+      profileBar.innerHTML = html;
+    }
+    function selectProfile(id) {
+      activeProfileId = id; const p = getActiveProfile();
+      if (p && p.language) sourceLanguage.value = p.language;
+      renderProfiles(); renderQuickTray(); saveCfg();
+    }
+    function addProfile() {
+      const name = prompt('輸入主播／頻道名稱（例：Yuki ミクチャ台）：'); if (!name) return;
+      const gl = prompt('輸入該主播專屬名字、口頭禪、粉絲稱呼：') || '';
+      const p = { id: Date.now(), name: name.trim(), glossary: gl.trim(), language: sourceLanguage.value };
+      profiles.unshift(p); activeProfileId = p.id; renderProfiles(); saveCfg();
+    }
+    function deleteProfile(id) {
+      if (!confirm('確定刪除此主播詞彙設定檔？')) return;
+      profiles = profiles.filter(p => p.id !== id);
+      if (activeProfileId === id) activeProfileId = 0; renderProfiles(); saveCfg();
+    }
+
+    function renderQuickTray() {
+      const code = sourceLanguage.value.slice(0,2);
+      const list = DEFAULT_PHRASES.filter(p => sourceLanguage.value === 'AUTO' || p.langCode === code || p.langCode === 'JA');
+      quickTray.innerHTML = list.map(p => `<button class="pill" onclick="copyText('${p.text.replace(/'/g,"\\'")}')" title="${p.meaning}">${p.text}</button>`).join('');
+    }
+
+    function toggleStar(id) {
+      historyData = historyData.map(x => {
+        if (x.id === id) {
+          const next = !x.starred;
+          if (next) addFlashcardFromItem({ ...x, starred: true });
+          return { ...x, starred: next };
+        }
+        return x;
+      });
+      renderHistory(); syncLiveStarBtn(); saveCfg();
+    }
+    function toggleSession(dateKey) { expandedDates[dateKey] = !expandedDates[dateKey]; renderHistory(); }
+
+    function exportSessionMd(dateKey) {
+      const items = historyData.filter(x => (x.date || '較早紀錄') === dateKey).slice().reverse();
+      const starred = items.filter(x => x.starred);
+      const summary = sessionSummaries[dateKey] || '';
+      let md = `# 直播精華筆記 — ${dateKey}\n\n- **總翻譯句數**：${items.length} 句（⭐ 收藏：${starred.length} 句）\n\n`;
+      if (summary) md += `## ✨ AI 重點摘要與實用口語\n\n${summary}\n\n`;
+      if (starred.length) {
+        md += `## ⭐ 星號收藏金句\n\n`;
+        starred.forEach(i => { md += `- **[${i.time}]** ${i.translated}\n  - 原文：${i.original}\n`; });
+        md += `\n`;
+      }
+      md += `## 📝 完整雙語字幕紀錄\n\n| 時間 | 語言 | 原文 | 翻譯 |\n| :--- | :--- | :--- | :--- |\n`;
+      items.forEach(i => {
+        md += `| ${i.time} | ${i.langCode} | ${(i.original||'').replace(/\|/g,'\\|')} | ${i.starred?'⭐ ':''}${(i.translated||'').replace(/\|/g,'\\|')} |\n`;
+      });
+      downloadFile(`LiveNotes_${dateKey}.md`, md, 'text/markdown;charset=utf-8');
+    }
+
+    function renderHistory() {
+      const q = (searchBox.value || '').trim().toLowerCase();
+      const list = historyData.filter(x => (!starredOnly || x.starred) && (!q || x.original.toLowerCase().includes(q) || x.translated.toLowerCase().includes(q) || (x.profileName||'').toLowerCase().includes(q)));
+      const groups = {};
+      list.forEach(x => { const k = x.date || '較早紀錄'; (groups[k] = groups[k] || []).push(x); });
+      const keys = Object.keys(groups).sort((a,b) => b.localeCompare(a));
+      if (!keys.length) { histList.innerHTML = '<p style="color:var(--muted);text-align:center;">尚無字幕紀錄</p>'; return; }
+
+      const today = todayStr();
+      histList.innerHTML = keys.map((k, idx) => {
+        const items = groups[k];
+        const open = expandedDates[k] !== undefined ? expandedDates[k] : (idx === 0 || !!q || starredOnly);
+        const starCnt = items.filter(i => i.starred).length;
+        const note = sessionSummaries[k] || '';
+        return `<div class="session-card">
+          <div class="session-head" onclick="toggleSession('${k}')">
+            <div><strong>${open?'▾':'▸'} ${k===today?k+'（今日）':k}</strong> <small style="color:var(--muted)">(${items.length} 句${starCnt?' · ⭐'+starCnt:''})</small></div>
+            <div class="row" style="margin:0" onclick="event.stopPropagation()">
+              <button class="sec" style="padding:4px 8px;font-size:12px;" onclick="exportSessionMd('${k}')">⬇ 匯出 .md</button>
+              <button class="sec" style="padding:4px 8px;font-size:12px;" onclick="summarizeSession('${k}')">✨ AI 總結</button>
+            </div>
+          </div>
+          ${open ? `<div class="session-body">
+            ${note ? `<pre class="summary">${note}</pre>` : ''}
+            ${items.map(x => `<div class="hist-item"><div style="flex:1"><small style="color:var(--accent)">${x.time} · ${x.langCode}${x.profileName?' · '+x.profileName:''}</small><div class="orig" style="color:var(--muted)">${x.original}</div><div>${x.translated}</div></div><button class="sec" style="padding:3px 7px;" onclick="explainItem(${x.id})" title="文法／潮語拆解">🎓</button>${x.original?`<button class="sec" style="padding:3px 7px;" onclick="speakOriginal('${x.original.replace(/'/g,"\\'").replace(/\n/g,' ')}','${x.langCode}')" title="朗讀原文發音">🔊</button>`:''}<button class="sec" style="padding:3px 7px;" onclick="toggleStar(${x.id})">${x.starred?'★':'☆'}</button></div>`).join('')}
+          </div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    function encodeWav16k(floatChunks, inputRate) {
+      let total = floatChunks.reduce((a, b) => a + b.length, 0);
+      let merged = new Float32Array(total); let off = 0;
+      for (const c of floatChunks) { merged.set(c, off); off += c.length; }
+      const ratio = inputRate / 16000; const outLen = Math.floor(merged.length / ratio);
+      const pcm = new Int16Array(outLen);
+      let peak = 0.001;
+      for (let i = 0; i < outLen; i++) { const a = Math.abs(merged[Math.floor(i * ratio)]); if (a > peak) peak = a; }
+      const gain = (peak > 0.015 && peak < 0.4) ? Math.min(3.5, 0.7 / peak) : 1.0;
+      for (let i = 0; i < outLen; i++) {
+        const s = Math.max(-1, Math.min(1, merged[Math.floor(i * ratio)] * gain));
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      const buf = new ArrayBuffer(44 + pcm.byteLength); const v = new DataView(buf);
+      const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      ws(0,'RIFF'); v.setUint32(4, 36 + pcm.byteLength, true); ws(8,'WAVE'); ws(12,'fmt ');
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 16000, true); v.setUint32(28, 32000, true); v.setUint16(32, 2, true);
+      v.setUint16(34, 16, true); ws(36,'data'); v.setUint32(40, pcm.byteLength, true);
+      new Int16Array(buf, 44).set(pcm);
+      const bytes = new Uint8Array(buf); let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return { b64: btoa(bin), durSec: Math.max(1, Math.round(outLen / 16000)) };
+    }
+
+    async function toggleCapture() {
+      if (stream) {
+        processor?.disconnect(); audioCtx?.close(); stream.getTracks().forEach(t => t.stop()); stream = null; isPaused = false;
+        speechSynthesis.cancel();
+        toggleBtn.textContent = '開始擷取分頁聲音並翻譯'; status.textContent = '● 已停止'; return;
+      }
+      if (!apiKey.value.trim()) return alert('請先填寫 Gemini API Key');
+      billing.sessionCostUsd = 0; renderBilling();
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) { alert('未偵測到音訊，請重新選擇並剔選「分享音訊」'); return toggleCapture(); }
+
+      audioCtx = new AudioContext();
+      const src = audioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
+      processor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+      let utterance = [], carryOver = [], preRoll = [];
+      let hasSpoken = false, onset = 0, silenceMs = 0, utterMs = 0;
+      const frameMs = (4096 / audioCtx.sampleRate) * 1000;
+
+      processor.onaudioprocess = e => {
+        if (isPaused) return;
+        const input = new Float32Array(e.inputBuffer.getChannelData(0));
+        let sum = 0; for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+        const isSpeech = Math.sqrt(sum / input.length) > 0.008;
+        if (!hasSpoken) {
+          preRoll.push(input); if (preRoll.length > 3) preRoll.shift();
+          if (isSpeech) { onset++; if (onset >= 2) { hasSpoken = true; utterance = carryOver.length ? [...carryOver] : [...preRoll]; preRoll = []; utterMs = utterance.length * frameMs; silenceMs = 0; status.textContent = '● 收音中…'; } }
+          else onset = 0;
+        } else {
+          utterance.push(input); utterMs += frameMs; silenceMs = isSpeech ? 0 : silenceMs + frameMs;
+          const pauseTrig = smartVad.checked && silenceMs >= 350 && utterMs >= 1000;
+          const maxTrig = utterMs >= 5000;
+          if (pauseTrig || maxTrig) {
+            const { b64, durSec } = encodeWav16k(utterance, audioCtx.sampleRate);
+            const keepFrames = overlapOn.checked ? Math.ceil((maxTrig ? 500 : 250) / frameMs) : 0;
+            carryOver = keepFrames > 0 ? utterance.slice(-keepFrames) : [];
+            utterance = []; hasSpoken = false; onset = 0; silenceMs = 0; utterMs = 0;
+            translateAudio(b64, durSec, pauseTrig ? '停頓斷句' : '重疊切段');
+          }
+        }
+      };
+      src.connect(processor); processor.connect(audioCtx.destination);
+      toggleBtn.textContent = '停止翻譯'; status.textContent = '● 智能聆聽中…';
+    }
+
+    async function translateAudio(b64, durSec, reason) {
+      status.textContent = `● ${reason}，AI 翻譯中…`;
+      const prof = getActiveProfile();
+      const ctx = historyData.slice(0, 4).reverse().map(x => `原:${x.original} / 譯:${x.translated}`).join('\n');
+      const styleText = style.value === 'CANTONESE' ? '翻譯成地道香港廣東話口語（繁體字）。' : (style.value === 'ENGLISH' ? 'Translate into natural English.' : '翻譯成自然繁體中文。');
+      const furiHint = (showFurigana.checked && (sourceLanguage.value === 'JAPANESE' || sourceLanguage.value === 'AUTO')) ? '當原文為日文時，請在 orig 欄位為漢字加括號平假名讀音，如 初見(しょけん)。\n' : '';
+      const profHint = prof ? `主播：${prof.name}；專屬詞庫：${prof.glossary}` : '';
+      const prompt = `你是專業直播即時口譯員。來源語言：${LANG_HINT[sourceLanguage.value]}。${styleText}\n${furiHint}開頭若有約0.5秒重疊緩衝聲音且已在前文出現，請自然銜接勿重複。\n${profHint}\n全域詞庫：${glossary.value}\n前文：${ctx}\n只輸出 JSON：{"orig":"聽寫原文","trans":"翻譯結果"}，若無清晰人聲輸出 {"orig":"","trans":"SILENT"}`;
+      const genCfg = { temperature: 0.15, responseMimeType: 'application/json' };
+      if (model.value.startsWith('gemini-2.5')) genCfg.thinkingConfig = { thinkingBudget: 0 };
+      try {
+        const res = await fetch(`${baseUrl.value.replace(/\/$/,'')}/v1beta/models/${model.value}:generateContent?key=${apiKey.value.trim()}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'audio/wav', data: b64 } }] }], generationConfig: genCfg })
+        });
+        const data = await res.json();
+        recordApiUsage(data.usageMetadata, model.value, durSec);
+        const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const obj = JSON.parse(txt.replace(/```json|```/g,'').trim());
+        const orig = obj.orig || obj.jp || ''; const trans = obj.trans || obj.zh || '';
+        if (trans && trans !== 'SILENT') {
+          const item = { id: Date.now(), date: todayStr(), time: new Date().toTimeString().slice(0,8), original: orig, translated: trans, langCode: sourceLanguage.value.slice(0,2), profileName: prof ? prof.name : '', starred: false };
+          latestId = item.id;
+          liveOrig.textContent = orig; liveTrans.textContent = trans;
+          historyData.unshift(item);
+          renderHistory(); syncLiveStarBtn(); saveCfg();
+          speakDubbing(trans);
+        }
+        status.textContent = `● 即時翻譯中（${reason}）`;
+      } catch (e) { status.textContent = '⚠ 錯誤：' + e.message; }
+    }
+
+    async function summarizeSession(dateKey) {
+      if (!apiKey.value.trim()) return alert('請先填寫 Gemini API Key');
+      const items = historyData.filter(x => (x.date || '較早紀錄') === dateKey);
+      if (!items.length) return;
+      expandedDates[dateKey] = true;
+      sessionSummaries[dateKey] = 'AI 正在整理本場重點話題與實用口語…';
+      renderHistory();
+      const lines = items.slice(0, 150).reverse().map(x => `${x.starred?'[⭐] ':''}[${x.time}] ${x.original} -> ${x.translated}`).join('\n');
+      const prompt = `以下是《${dateKey} 直播》字幕紀錄：\n${lines}\n請用繁體中文整理：\n1. 📌 本場重點話題摘要\n2. 🗣️ 學到的實用口語／生字清單（附讀音與解釋，每行格式：原文｜中文意思｜用法）\n3. ✨ 直播亮點總結`;
+      try {
+        const res = await fetch(`${baseUrl.value.replace(/\/$/,'')}/v1beta/models/${model.value}:generateContent?key=${apiKey.value.trim()}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.35 } })
+        });
+        const data = await res.json();
+        recordApiUsage(data.usageMetadata, model.value, 0);
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '無法生成總結';
+        sessionSummaries[dateKey] = text;
+        text.split('\n').forEach((line, idx) => {
+          const t = line.trim().replace(/^[-*]\s*/, '');
+          if (t.includes('｜')) {
+            const p = t.split('｜');
+            const term = stripFurigana(p[0]||'').replace(/^[0-9]+\.?\s*/,'').trim();
+            const meaning = (p[1]||'').trim();
+            if (term && meaning && !flashcards.some(c => c.term === term)) {
+              flashcards.unshift({ id: Date.now()+idx, term, reading: (p[0]||'').trim(), meaning, example: (p[2]||'').trim(), langCode: sourceLanguage.value.slice(0,2), masteredCount: 0 });
+            }
+          }
+        });
+        renderHistory(); renderFlashcards(); saveCfg();
+      } catch (e) { sessionSummaries[dateKey] = '總結失敗：' + e.message; renderHistory(); }
+    }
+
+    function downloadFile(name, content, type) {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type })); a.download = name; a.click();
+    }
+    function exportJson() {
+      downloadFile(`LiveTranslator_${Date.now()}.json`, JSON.stringify({ schemaVersion:8, settings:{ baseUrl:baseUrl.value, model:model.value, sourceLanguage:sourceLanguage.value, style:style.value, activeProfileId, showFurigana:showFurigana.checked, liveDubbing, dubSpeed:dubSpeed.value, glossary:glossary.value }, billing, profiles, flashcards, sessionSummaries, history:historyData }, null, 2), 'application/json');
+    }
+    function exportCsv() {
+      const rows = ['\uFEFF日期,時間,主播設定檔,已收藏,語言,原文,翻譯', ...historyData.map(x => `"${x.date||''}","${x.time}","${(x.profileName||'').replace(/"/g,'""')}","${x.starred?'★':''}","${x.langCode}","${(x.original||'').replace(/"/g,'""')}","${(x.translated||'').replace(/"/g,'""')}"`)];
+      downloadFile(`LiveTranslator_${Date.now()}.csv`, rows.join('\n'), 'text/csv');
+    }
+    function importJson(ev) {
+      const f = ev.target.files[0]; if (!f) return;
+      const fr = new FileReader();
+      fr.onload = () => {
+        try {
+          const d = JSON.parse(fr.result);
+          if (!Array.isArray(d.history)) throw new Error('缺少 history 欄位');
+          const overwrite = confirm('按「確定」覆蓋現有紀錄；按「取消」與現有紀錄合併。');
+          const norm = d.history.map(x => ({ id:x.id||Date.now(), date:x.date||'較早紀錄', time:x.time||'', original:x.original??x.japanese??'', translated:x.translated??x.chinese??'', langCode:x.langCode||'JA', profileName:x.profileName||'', starred:!!x.starred }));
+          historyData = overwrite ? norm : [...norm, ...historyData];
+          if (d.billing && overwrite) { billing = { ...billing, ...d.billing }; renderBilling(); }
+          if (Array.isArray(d.flashcards) && d.flashcards.length) flashcards = overwrite ? d.flashcards : [...d.flashcards, ...flashcards];
+          if (Array.isArray(d.profiles) && d.profiles.length) profiles = overwrite ? d.profiles : [...d.profiles, ...profiles];
+          if (d.sessionSummaries) sessionSummaries = overwrite ? d.sessionSummaries : { ...sessionSummaries, ...d.sessionSummaries };
+          renderProfiles(); renderHistory(); renderFlashcards(); syncLiveStarBtn(); saveCfg(); alert('匯入成功！');
+        } catch (e) { alert('匯入失敗：' + e.message); }
+      };
+      fr.readAsText(f);
+    }
+    loadCfg();
+  </script>
+</body>
+</html>
